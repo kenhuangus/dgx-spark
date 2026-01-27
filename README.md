@@ -49,7 +49,7 @@ This script provides a robust, production-grade solution for managing Ollama and
 
 1. **Download the script**:
    ```bash
-   curl -O https://your-domain.com/ollama-webui-update.sh
+   curl -O https://github.com/kenhuangus/dgx-spark/ollama-webui-update.sh
    chmod +x ollama-webui-update.sh
    ```
 
