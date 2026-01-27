@@ -1,4 +1,4 @@
-```bash
+
 #!/bin/bash
 # 🚀 PRODUCTION DGX Spark Ollama + WebUI Update Script
 # Version: 2.3 - Optimized for ~/.ollama/models/
@@ -973,4 +973,4 @@ release_lock 2>/dev/null || true
 rm -f /tmp/Modelfile.$$ 2>/dev/null || true
 
 exit $exit_code
-```
+
