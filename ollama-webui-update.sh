@@ -80,7 +80,7 @@ detect_models_directory() {
         if [ -d "$dir" ]; then
             if [ -d "$dir/manifests" ] || [ -d "$dir/blobs" ] || [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
                 MODELS_DIR="$dir"
-                log "âœ… Found existing models directory: $MODELS_DIR"
+                log "[OK] Found existing models directory: $MODELS_DIR"
                 
                 local model_count=0
                 local manifest_count=0
@@ -116,7 +116,7 @@ detect_models_directory() {
             log "  - $mount"
             if [ -d "$mount/ollama/models" ] && { [ -d "$mount/ollama/models/manifests" ] || [ -d "$mount/ollama/models/blobs" ]; }; then
                 MODELS_DIR="$mount/ollama/models"
-                log "âœ… Found models on logical volume: $MODELS_DIR"
+                log "[OK] Found models on logical volume: $MODELS_DIR"
                 export OLLAMA_MODELS="$MODELS_DIR"
                 OLLAMA_MODELS_ENV="$MODELS_DIR"
                 return 0
@@ -361,7 +361,7 @@ clear_system_cache() {
 
 # ========== MAIN EXECUTION ==========
 main() {
-    log "ðŸš€ === DGX Spark Ollama/WebUI Update Script v2.6 (PID: $$) ==="
+    log "=== DGX Spark Ollama/WebUI Update Script v2.7 (PID: $$) ==="
     log "Start time: $(date)"
     
     acquire_lock
@@ -394,10 +394,10 @@ main() {
             log "Latest Ollama version: $latest_ollama_version"
             
             if [ "$current_ollama_version" != "$latest_ollama_version" ] && [ "$current_ollama_version" != "unknown" ]; then
-                log "âš ï¸  Ollama update available: $current_ollama_version â†’ $latest_ollama_version"
+                log "[UPDATE] Ollama update available: $current_ollama_version -> $latest_ollama_version"
                 needs_ollama_update=true
             else
-                success "âœ“ Ollama is already at latest version ($current_ollama_version)"
+                success "[OK] Ollama is already at latest version ($current_ollama_version)"
             fi
         else
             warn "Could not determine latest Ollama version, will attempt update"
@@ -432,9 +432,9 @@ main() {
                 log "Remote digest: ${remote_digest:0:12}..."
                 
                 if [ "$current_image_id" = "$remote_digest" ]; then
-                    success "âœ“ WebUI is up to date"
+                    success "[OK] WebUI is up to date"
                 else
-                    log "âš ï¸  WebUI update available"
+                    log "[UPDATE] WebUI update available"
                     needs_webui_update=true
                 fi
             else
@@ -447,9 +447,9 @@ main() {
                     latest_local_id="${latest_local_id#sha256:}"
                     
                     if [ "$current_image_id" = "$latest_local_id" ]; then
-                        success "âœ“ WebUI is up to date (based on local images)"
+                        success "[OK] WebUI is up to date (based on local images)"
                     else
-                        log "âš ï¸  Newer local image available (container needs recreation)"
+                        log "[UPDATE] Newer local image available (container needs recreation)"
                         needs_webui_update=true
                     fi
                 else
@@ -494,7 +494,7 @@ main() {
         
         success "WebUI stopped for update"
     else
-        log "â­ï¸  WebUI cleanup skipped (no update needed)"
+        log "[SKIP] WebUI cleanup skipped (no update needed)"
     fi
     
     if [ "$needs_ollama_update" = true ] || [ "$needs_webui_update" = true ]; then
@@ -510,7 +510,7 @@ main() {
         if curl -fsSL https://ollama.com/install.sh 2>/dev/null | sh 2>&1 | tee -a "$LOG_FILE"; then
             local new_version
             new_version=$(ollama --version 2>/dev/null | grep -oP 'ollama version is \K[0-9.]+' || echo "unknown")
-            success "Ollama updated: $current_ollama_version â†’ $new_version"
+            success "Ollama updated: $current_ollama_version -> $new_version"
         else
             warn "Ollama update failed - continuing with current version"
         fi
@@ -533,8 +533,10 @@ main() {
     export OLLAMA_FLASH_ATTENTION=1
     export OLLAMA_SCHED_SPREAD=0
     export OLLAMA_GPU_LAYERS=$NUM_GPU_LAYERS
+    export OLLAMA_HOST="0.0.0.0:${OLLAMA_PORT}"
     
     log "OLLAMA_MODELS set to: $MODELS_DIR"
+    log "OLLAMA_HOST set to: 0.0.0.0:${OLLAMA_PORT} (accessible on LAN)"
     
     if command -v nvidia-smi >/dev/null 2>&1; then
         local gpu_mem
@@ -556,7 +558,7 @@ main() {
         kill_port_processes "$OLLAMA_PORT"
         sleep 2
         
-        OLLAMA_MODELS="$MODELS_DIR" nohup ollama serve > /tmp/ollama-temp.log 2>&1 &
+        OLLAMA_MODELS="$MODELS_DIR" OLLAMA_HOST="0.0.0.0:${OLLAMA_PORT}" nohup ollama serve > /tmp/ollama-temp.log 2>&1 &
         local temp_ollama_pid=$!
         sleep 10
         
@@ -591,7 +593,7 @@ main() {
             local model_count=0
             
             if [ -z "$models" ]; then
-                log " No models found to optimize."
+                log "[INFO] No models found to optimize."
                 log ""
                 log "To pull models, use:"
                 log "   OLLAMA_MODELS=$MODELS_DIR ollama pull llama3.2"
@@ -605,11 +607,11 @@ main() {
                     local new_name="${base_model}-maxgpu"
                     
                     if OLLAMA_MODELS="$MODELS_DIR" ollama list 2>/dev/null | grep -q "$new_name"; then
-                        log " Skipping $base_model (maxgpu version exists)"
+                        log "[SKIP] Skipping $base_model (maxgpu version exists)"
                         continue
                     fi
                     
-                    debug "Processing: $base_model â†’ $new_name"
+                    debug "Processing: $base_model -> $new_name"
                     
                     cat > /tmp/Modelfile.$$ << MODELFILE_EOF
 FROM $base_model
@@ -622,7 +624,7 @@ PARAMETER repeat_penalty 1.1
 MODELFILE_EOF
                     
                     if timeout 120 OLLAMA_MODELS="$MODELS_DIR" ollama create "$new_name" -f /tmp/Modelfile.$$ 2>&1 | tee -a "$LOG_FILE"; then
-                        success "$base_model â†’ $new_name (100% GPU)"
+                        success "$base_model -> $new_name (100% GPU)"
                         model_count=$((model_count + 1))
                     else
                         warn "Failed to create $new_name (timeout or error)"
@@ -662,7 +664,7 @@ MODELFILE_EOF
             log "Ollama process found, checking API..."
             if curl -s "http://localhost:$OLLAMA_PORT/api/tags" >/dev/null 2>&1; then
                 ollama_running=true
-                success "âœ“ Ollama is already running and responding"
+                success "[OK] Ollama is already running and responding"
             else
                 warn "Ollama process exists but API not responding, will restart"
                 ollama_needs_start=true
@@ -680,6 +682,7 @@ MODELFILE_EOF
         sleep 2
         
         log "Starting Ollama daemon with models at: $MODELS_DIR"
+        log "Ollama will listen on 0.0.0.0:${OLLAMA_PORT} (LAN accessible)"
         
         sudo mkdir -p /etc/systemd/system/ollama.service.d 2>/dev/null || true
         sudo tee /etc/systemd/system/ollama.service.d/models.conf > /dev/null << SYSTEMD_EOF
@@ -688,11 +691,12 @@ Environment="OLLAMA_MODELS=$MODELS_DIR"
 Environment="OLLAMA_MAX_LOADED_MODELS=$MAX_LOADED_MODELS"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_FLASH_ATTENTION=1"
+Environment="OLLAMA_HOST=0.0.0.0:${OLLAMA_PORT}"
 SYSTEMD_EOF
         
         sudo systemctl daemon-reload 2>/dev/null || true
         
-        OLLAMA_MODELS="$MODELS_DIR" nohup ollama serve > /var/log/ollama.log 2>&1 &
+        OLLAMA_MODELS="$MODELS_DIR" OLLAMA_HOST="0.0.0.0:${OLLAMA_PORT}" nohup ollama serve > /var/log/ollama.log 2>&1 &
         local ollama_pid=$!
         
         success "Ollama started (PID: $ollama_pid)"
@@ -726,7 +730,7 @@ SYSTEMD_EOF
     fi
     
     log ""
-    log "ðŸ“‹ Models available via Ollama API:"
+    log "[MODELS] Models available via Ollama API:"
     local api_response
     api_response=$(curl -s "http://localhost:$OLLAMA_PORT/api/tags" 2>/dev/null || echo '{"models":[]}')
     
@@ -735,7 +739,7 @@ SYSTEMD_EOF
     
     if [ -n "$model_names" ]; then
         echo "$model_names" | while read -r model_name; do
-            log "  âœ“ $model_name"
+            log "  [OK] $model_name"
         done
     else
         log "  (No models loaded yet - pull models to get started)"
@@ -782,7 +786,7 @@ SYSTEMD_EOF
                 if timeout 5 curl -s "http://localhost:$WEBUI_PORT" >/dev/null 2>&1; then
                     if [ "$webui_config_mismatch" = false ]; then
                         webui_running=true
-                        success "âœ“ WebUI is running with correct model configuration"
+                        success "[OK] WebUI is running with correct model configuration"
                     else
                         log "WebUI responding but needs reconfiguration for correct model path"
                     fi
@@ -803,7 +807,7 @@ SYSTEMD_EOF
     if [ "$webui_needs_start" = true ]; then
         if [ "$webui_config_mismatch" = true ]; then
             log "Restarting WebUI with correct model configuration..."
-            log "â„¹ï¸  Preserving WebUI data volume (users, chats, settings)"
+            log "[INFO] Preserving WebUI data volume (users, chats, settings)"
         else
             log "Starting WebUI Docker..."
         fi
@@ -850,6 +854,10 @@ SYSTEMD_EOF
         # CRITICAL: Mount to /root/.ollama/models inside container!
         log "Starting WebUI with model mount: $MODELS_DIR -> /root/.ollama/models"
         
+        # Get LAN IP address for display
+        local lan_ip
+        lan_ip=$(hostname -I | awk '{print $1}' || echo "localhost")
+        
         if docker run -d \
             --name open-webui \
             --gpus=all \
@@ -873,7 +881,7 @@ SYSTEMD_EOF
             verify_env=$(docker inspect open-webui --format='{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep "^OLLAMA_MODELS=" | cut -d'=' -f2 || echo "")
             
             if [ "$verify_mount_src" = "$MODELS_DIR" ] && [ "$verify_env" = "/root/.ollama/models" ]; then
-                success "âœ“ WebUI configuration verified:"
+                success "[OK] WebUI configuration verified:"
                 log "  Host path: $verify_mount_src"
                 log "  Container path: /root/.ollama/models"
                 log "  OLLAMA_MODELS: $verify_env"
@@ -891,7 +899,7 @@ SYSTEMD_EOF
                     success "WebUI is responding"
                     break
                 fi
-                [ $i -eq 15 ] && log "â³ WebUI may take 30-60s to fully start"
+                [ $i -eq 15 ] && log "[WAIT] WebUI may take 30-60s to fully start"
                 sleep 2
             done
         else
@@ -904,22 +912,26 @@ SYSTEMD_EOF
     
     sleep 5
     
+    # Get LAN IP address
+    local lan_ip
+    lan_ip=$(hostname -I | awk '{print $1}' || echo "localhost")
+    
     if curl -s "http://localhost:$OLLAMA_PORT/api/tags" >/dev/null 2>&1; then
-        success "âœ“ Ollama API responding on port $OLLAMA_PORT"
+        success "[OK] Ollama API responding on port $OLLAMA_PORT"
     else
-        warn "âœ— Ollama API not responding (check /var/log/ollama.log)"
+        warn "[ERROR] Ollama API not responding (check /var/log/ollama.log)"
     fi
     
     if timeout 5 curl -s "http://localhost:$WEBUI_PORT" >/dev/null 2>&1; then
-        success "âœ“ WebUI responding on port $WEBUI_PORT"
+        success "[OK] WebUI responding on port $WEBUI_PORT"
     else
-        log "â³ WebUI starting... (may take 30-60s)"
+        log "[WAIT] WebUI starting... (may take 30-60s)"
         log "   Monitor with: docker logs -f open-webui"
     fi
     
     if command -v nvidia-smi >/dev/null 2>&1; then
         log ""
-        log "ðŸŽ¯ GPU Status:"
+        log "[GPU] GPU Status:"
         nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu \
             --format=csv,noheader 2>/dev/null | tee -a "$LOG_FILE" || true
         log ""
@@ -927,17 +939,24 @@ SYSTEMD_EOF
     
     local api_model_count
     api_model_count=$(echo "$model_names" | grep -c . || echo "0")
-    log "ðŸ“Š Models available: $api_model_count"
+    log "[STATS] Models available: $api_model_count"
     
     local disk_usage
     disk_usage=$(du -sh "$MODELS_DIR" 2>/dev/null | awk '{print $1}' || echo 'unknown')
-    log "ðŸ’¾ Models directory size: $disk_usage"
+    log "[STATS] Models directory size: $disk_usage"
     
     release_lock
     
-
-    log "   Ollama API:  http://localhost:$OLLAMA_PORT"
-    log "   WebUI:       http://localhost:$WEBUI_PORT"
+    log ""
+    log "================================================"
+    log "   ACCESS INFORMATION"
+    log "================================================"
+    log ""
+    log "   Ollama API (localhost):  http://localhost:$OLLAMA_PORT"
+    log "   Ollama API (LAN):        http://$lan_ip:$OLLAMA_PORT"
+    log ""
+    log "   WebUI (localhost):       http://localhost:$WEBUI_PORT"
+    log "   WebUI (LAN):             http://$lan_ip:$WEBUI_PORT"
     log ""
     log "Configuration:"
     log "   Models Dir (host):      $MODELS_DIR"
@@ -945,22 +964,23 @@ SYSTEMD_EOF
     log "   Log File:               $LOG_FILE"
     log "   Ollama Log:             /var/log/ollama.log"
     log ""
-    log "âš¡ GPU Optimizations:"
+    log "[GPU] GPU Optimizations:"
     log "   Use models ending in '-maxgpu' for 100% GPU offload"
     log "   Example: llama3.2-maxgpu, mistral-maxgpu"
     log ""
-    log "ðŸ“ Quick Commands:"
+    log "[HELP] Quick Commands:"
     log "   Pull model:  OLLAMA_MODELS=$MODELS_DIR ollama pull llama3.2"
     log "   List models: OLLAMA_MODELS=$MODELS_DIR ollama list"
     log "   Test model:  OLLAMA_MODELS=$MODELS_DIR ollama run llama3.2"
     log ""
-    log "ðŸ” Troubleshooting:"
+    log "[DEBUG] Troubleshooting:"
     log "   Ollama logs: tail -f /var/log/ollama.log"
     log "   WebUI logs:  docker logs -f open-webui"
     log "   GPU status:  watch -n 1 nvidia-smi"
     log "   Verify mount: docker inspect open-webui --format='{{range .Mounts}}{{println .Source}} -> {{.Destination}}{{end}}'"
     log ""
     log "End time: $(date)"
+    log "================================================"
    
     return 0
 }
