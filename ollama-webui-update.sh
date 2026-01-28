@@ -37,11 +37,11 @@ warn() {
 }
 
 error_continue() {
-    echo "âš ï¸  ERROR (continuing): $1" | tee -a "$LOG_FILE" 2>/dev/null || echo "[ERROR] $1"
+    echo "ERROR (continuing): $1" | tee -a "$LOG_FILE" 2>/dev/null || echo "[ERROR] $1"
 }
 
 success() {
-    echo "âœ… $1" | tee -a "$LOG_FILE" 2>/dev/null || echo "[SUCCESS] $1"
+    echo "$1" | tee -a "$LOG_FILE" 2>/dev/null || echo "[SUCCESS] $1"
 }
 
 # ========== MODEL DIRECTORY DETECTION ==========
@@ -95,7 +95,7 @@ detect_models_directory() {
                     blob_count=$(find "$MODELS_DIR/blobs" -type f 2>/dev/null | wc -l)
                 fi
                 
-                log "ðŸ“Š Found $manifest_count model manifests and $blob_count blob files"
+                log "Found $manifest_count model manifests and $blob_count blob files"
                 
                 export OLLAMA_MODELS="$MODELS_DIR"
                 OLLAMA_MODELS_ENV="$MODELS_DIR"
@@ -126,9 +126,6 @@ detect_models_directory() {
     
     local best_dir="$user_home/.ollama/models"
     
-    log "âš ï¸  No existing models found, will use: $best_dir"
-    log "ðŸ“ Note: You can pull models after script completes"
-    
     mkdir -p "$best_dir" 2>/dev/null || {
         best_dir="/root/.ollama/models"
         mkdir -p "$best_dir" || {
@@ -140,8 +137,7 @@ detect_models_directory() {
     MODELS_DIR="$best_dir"
     export OLLAMA_MODELS="$MODELS_DIR"
     OLLAMA_MODELS_ENV="$MODELS_DIR"
-    
-    log "âœ… Models directory set to: $MODELS_DIR"
+
     return 0
 }
 
@@ -485,7 +481,7 @@ main() {
         
         success "Ollama stopped for update"
     else
-        log "â­ï¸  Ollama cleanup skipped (no update needed)"
+        log "Ollama cleanup skipped (no update needed)"
     fi
     
     if [ "$needs_webui_update" = true ]; then
@@ -519,13 +515,13 @@ main() {
             warn "Ollama update failed - continuing with current version"
         fi
     else
-        log "â­ï¸  Ollama update skipped (already latest)"
+        log "Ollama update skipped (already latest)"
     fi
     
     if [ "$needs_webui_update" = true ]; then
         log "WebUI will be updated in Phase 6"
     else
-        log "â­ï¸  WebUI update skipped (already latest)"
+        log "WebUI update skipped (already latest)"
     fi
     
     # ========== PHASE 4: GPU OPTIMIZATION CONFIGURATION ==========
@@ -538,7 +534,7 @@ main() {
     export OLLAMA_SCHED_SPREAD=0
     export OLLAMA_GPU_LAYERS=$NUM_GPU_LAYERS
     
-    log "ðŸ—‚ï¸  OLLAMA_MODELS set to: $MODELS_DIR"
+    log "OLLAMA_MODELS set to: $MODELS_DIR"
     
     if command -v nvidia-smi >/dev/null 2>&1; then
         local gpu_mem
@@ -551,7 +547,7 @@ main() {
     log "=== PHASE 5: Processing models for GPU offload ==="
     
     if [ "$needs_ollama_update" = false ]; then
-        log "â­ï¸  Skipping model processing (Ollama was not updated)"
+        log "Skipping model processing (Ollama was not updated)"
         log "   Existing GPU-optimized models will be used"
     else
         log "Processing models due to Ollama update..."
@@ -595,9 +591,9 @@ main() {
             local model_count=0
             
             if [ -z "$models" ]; then
-                log "âš ï¸  No models found to optimize."
+                log " No models found to optimize."
                 log ""
-                log "ðŸ“ To pull models, use:"
+                log "To pull models, use:"
                 log "   OLLAMA_MODELS=$MODELS_DIR ollama pull llama3.2"
                 log "   OLLAMA_MODELS=$MODELS_DIR ollama pull mistral"
             else
@@ -609,7 +605,7 @@ main() {
                     local new_name="${base_model}-maxgpu"
                     
                     if OLLAMA_MODELS="$MODELS_DIR" ollama list 2>/dev/null | grep -q "$new_name"; then
-                        log "â­ï¸  Skipping $base_model (maxgpu version exists)"
+                        log " Skipping $base_model (maxgpu version exists)"
                         continue
                     fi
                     
@@ -939,16 +935,11 @@ SYSTEMD_EOF
     
     release_lock
     
-    log ""
-    log "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
-    log "ðŸŽ‰ DEPLOYMENT COMPLETE"
-    log "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
-    log ""
-    log "ðŸŒ Access Points:"
+
     log "   Ollama API:  http://localhost:$OLLAMA_PORT"
     log "   WebUI:       http://localhost:$WEBUI_PORT"
     log ""
-    log "ðŸ“ Configuration:"
+    log "Configuration:"
     log "   Models Dir (host):      $MODELS_DIR"
     log "   Models Dir (container): /root/.ollama/models"
     log "   Log File:               $LOG_FILE"
@@ -970,8 +961,7 @@ SYSTEMD_EOF
     log "   Verify mount: docker inspect open-webui --format='{{range .Mounts}}{{println .Source}} -> {{.Destination}}{{end}}'"
     log ""
     log "End time: $(date)"
-    log "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
-    
+   
     return 0
 }
 
